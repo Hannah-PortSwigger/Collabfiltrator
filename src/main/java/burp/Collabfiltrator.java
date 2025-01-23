@@ -1,10 +1,12 @@
 package burp;
 
 import burp.api.montoya.MontoyaApi;
+import burp.api.montoya.collaborator.Collaborator;
 import burp.api.montoya.collaborator.CollaboratorClient;
 import burp.api.montoya.collaborator.CollaboratorPayload;
 import burp.api.montoya.BurpExtension;
 import burp.api.montoya.logging.Logging;
+import burp.api.montoya.persistence.PersistedObject;
 import burp.api.montoya.ui.UserInterface;
 
 import javax.swing.*;
@@ -12,8 +14,9 @@ import java.awt.*;
 import java.awt.datatransfer.StringSelection;
 import java.util.*;
 
+import static burp.api.montoya.collaborator.SecretKey.secretKey;
+
 public class Collabfiltrator implements BurpExtension {
-    private MontoyaApi api;
     private Logging logging;
     private UserInterface userInterface;
     private CollaboratorClient collaboratorClient;
@@ -29,16 +32,11 @@ public class Collabfiltrator implements BurpExtension {
     private RCEPanel rcePanel;
     private SQLiPanel sqliPanel;
 
-    public Collabfiltrator() {
-        this.collaboratorClient = null; // Will be initialized in initialize()
-    }
-
     @Override
     public void initialize(MontoyaApi api) {
-        this.api = api;
         this.logging = api.logging();
         this.userInterface = api.userInterface();
-        this.collaboratorClient = api.collaborator().createClient();
+        this.collaboratorClient = createCollaboratorClient(api.collaborator(), api.persistence().extensionData());
         this.rcePayloadManager = new RCEPayloadManager(collaboratorClient, logging);
         this.sqliPayloadManager = new SQLiPayloadManager(lastExfiltratedTableByDBMS, lastExfiltratedColumnByDBMS, logging);
 
@@ -68,6 +66,27 @@ public class Collabfiltrator implements BurpExtension {
         
         generateNewRCECollaboratorPayload();
         generateNewSQLiCollaboratorPayload();
+    }
+
+    private CollaboratorClient createCollaboratorClient(Collaborator collaborator, PersistedObject persistedData) {
+        String persistedCollaboratorKey = "persisted_collaborator";
+        CollaboratorClient collaboratorClient;
+
+        String existingCollaboratorKey = persistedData.getString(persistedCollaboratorKey);
+
+        if (existingCollaboratorKey != null) {
+            logging.logToOutput("Restoring Collaborator client from key.");
+            collaboratorClient = collaborator.restoreClient(secretKey(existingCollaboratorKey));
+        } else {
+            logging.logToOutput("No previously found Collaborator client. Creating new client...");
+            collaboratorClient = collaborator.createClient();
+
+            // Save the secret key of the CollaboratorClient so that you can retrieve it later.
+            logging.logToOutput("Saving Collaborator secret key.");
+            persistedData.setString(persistedCollaboratorKey, collaboratorClient.getSecretKey().toString());
+        }
+
+        return collaboratorClient;
     }
 
     private void setupGui() {

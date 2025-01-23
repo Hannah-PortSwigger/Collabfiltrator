@@ -15,7 +15,7 @@
     <dependencies>
         <!-- Montoya API Dependency -->
         <dependency>
-            <groupId>net.portswigger.burp</groupId>
+            <groupId>net.portswigger.burp.extensions</groupId>
             <artifactId>montoya-api</artifactId>
             <version>2024.7</version>
         </dependency>
